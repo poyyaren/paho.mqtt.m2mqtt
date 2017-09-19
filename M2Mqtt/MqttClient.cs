@@ -1590,6 +1590,8 @@ namespace uPLibrary.Networking.M2Mqtt
                     {
                         // wake up thread that will notify connection is closing
                         this.OnConnectionClosing();
+                        // fix
+                        break;
                     }
                 }
                 catch (Exception e)
