@@ -17,6 +17,11 @@ Contributors:
 #if SSL
 #if (MF_FRAMEWORK_VERSION_V4_2 || MF_FRAMEWORK_VERSION_V4_3)
 using Microsoft.SPOT.Net.Security;
+#elif (COMPACT_FRAMEWORK)
+using Org.BouncyCastle.Crypto.Tls;
+using Org.BouncyCastle.Security;
+using Org.BouncyCastle.Utilities.IO;
+using Org.BouncyCastle.X509;
 #else
 using System.Net.Security;
 using System.Security.Authentication;
@@ -24,11 +29,37 @@ using System.Security.Authentication;
 #endif
 using System.Net.Sockets;
 using System.Net;
+#if !(COMPACT_FRAMEWORK)
 using System.Security.Cryptography.X509Certificates;
+#endif
 using System;
 
 namespace uPLibrary.Networking.M2Mqtt
 {
+#if COMPACT_FRAMEWORK
+    internal class MyTlsClient : DefaultTlsClient
+    {
+        public override TlsAuthentication GetAuthentication()
+        {
+            return new MyTlsAuthentication();
+        }
+    }
+
+    internal class MyTlsAuthentication : TlsAuthentication
+    {
+        // TODO: implement RemoteCertificateValidationCallback alternative
+        public void NotifyServerCertificate(Certificate serverCertificate)
+        {
+        }
+
+        // TODO: implement LocalCertificateSelectionCallback alternative
+        public TlsCredentials GetClientCredentials(CertificateRequest certificateRequest)
+        {
+            return null;
+        }
+    }
+#endif
+
     /// <summary>
     /// Channel to communicate over the network
     /// </summary>
@@ -43,8 +74,12 @@ namespace uPLibrary.Networking.M2Mqtt
         private IPAddress remoteIpAddress;
         private int remotePort;
 
+#if !COMPACT_FRAMEWORK
         // socket for communication
         private Socket socket;
+#else
+        private TcpClient tcp;
+#endif
         // using SSL
         private bool secure;
 
@@ -75,8 +110,12 @@ namespace uPLibrary.Networking.M2Mqtt
 
 #if SSL
         // SSL stream
+#if !COMPACT_FRAMEWORK
         private SslStream sslStream;
-#if (!MF_FRAMEWORK_VERSION_V4_2 && !MF_FRAMEWORK_VERSION_V4_3)
+#else
+        private TlsClientProtocol tlsHandler;
+#endif
+#if (!MF_FRAMEWORK_VERSION_V4_2 && !MF_FRAMEWORK_VERSION_V4_3 && !COMPACT_FRAMEWORK)
         private NetworkStream netStream;
 #endif
 #endif
@@ -94,6 +133,11 @@ namespace uPLibrary.Networking.M2Mqtt
                     return this.sslStream.DataAvailable;
                 else
                     return (this.socket.Available > 0);
+#elif COMPACT_FRAMEWORK
+                if (secure)
+                    return ((NetworkStream) this.tlsHandler.Stream).DataAvailable;
+                else
+                    return (this.tcp.Client.Available > 0);
 #else
                 if (secure)
                     return this.netStream.DataAvailable;
@@ -137,7 +181,11 @@ namespace uPLibrary.Networking.M2Mqtt
         public MqttNetworkChannel(Socket socket, bool secure, X509Certificate serverCert, MqttSslProtocols sslProtocol)
 #endif
         {
+#if COMPACT_FRAMEWORK
+            this.tcp = new TcpClient(socket.AddressFamily);
+#else
             this.socket = socket;
+#endif
             this.secure = secure;
             this.serverCert = serverCert;
             this.sslProtocol = sslProtocol;
@@ -226,9 +274,14 @@ namespace uPLibrary.Networking.M2Mqtt
         /// </summary>
         public void Connect()
         {
+#if COMPACT_FRAMEWORK
+            this.tcp = new TcpClient();
+            this.tcp.Connect(new IPEndPoint(this.remoteIpAddress, this.remotePort));
+#else
             this.socket = new Socket(this.remoteIpAddress.GetAddressFamily(), SocketType.Stream, ProtocolType.Tcp);
             // try connection to the broker
             this.socket.Connect(new IPEndPoint(this.remoteIpAddress, this.remotePort));
+#endif
 
 #if SSL
             // secure channel requested
@@ -237,6 +290,9 @@ namespace uPLibrary.Networking.M2Mqtt
                 // create SSL stream
 #if (MF_FRAMEWORK_VERSION_V4_2 || MF_FRAMEWORK_VERSION_V4_3)
                 this.sslStream = new SslStream(this.socket);
+#elif COMPACT_FRAMEWORK
+                this.tlsHandler = new TlsClientProtocol(tcp.GetStream(), new SecureRandom());
+                this.tlsHandler.Connect(new MyTlsClient());
 #else
                 this.netStream = new NetworkStream(this.socket);
                 this.sslStream = new SslStream(this.netStream, false, this.userCertificateValidationCallback, this.userCertificateSelectionCallback);
@@ -249,6 +305,8 @@ namespace uPLibrary.Networking.M2Mqtt
                     new X509Certificate[] { this.caCert },
                     SslVerification.CertificateRequired,
                     MqttSslUtility.ToSslPlatformEnum(this.sslProtocol));
+#elif COMPACT_FRAMEWORK
+                // nothing to do here - see TO DOs at top of file
 #else
                 X509CertificateCollection clientCertificates = null;
                 // check if there is a client certificate to add to the collection, otherwise it's null (as empty)
@@ -275,12 +333,22 @@ namespace uPLibrary.Networking.M2Mqtt
 #if SSL
             if (this.secure)
             {
+#if COMPACT_FRAMEWORK
+                this.tlsHandler.Stream.Write(buffer, 0, buffer.Length);
+                this.tlsHandler.Stream.Flush();
+#else
                 this.sslStream.Write(buffer, 0, buffer.Length);
                 this.sslStream.Flush();
+#endif
+
                 return buffer.Length;
             }
             else
+#if COMPACT_FRAMEWORK
+                return this.tcp.Client.Send(buffer, 0, buffer.Length, SocketFlags.None);
+#else
                 return this.socket.Send(buffer, 0, buffer.Length, SocketFlags.None);
+#endif
 #else
             return this.socket.Send(buffer, 0, buffer.Length, SocketFlags.None);
 #endif
@@ -302,7 +370,11 @@ namespace uPLibrary.Networking.M2Mqtt
                 {
                     // fixed scenario with socket closed gracefully by peer/broker and
                     // Read return 0. Avoid infinite loop.
+#if COMPACT_FRAMEWORK
+                    read = this.tlsHandler.Stream.Read(buffer, idx, buffer.Length - idx);
+#else
                     read = this.sslStream.Read(buffer, idx, buffer.Length - idx);
+#endif
                     if (read == 0)
                         return 0;
                     idx += read;
@@ -317,7 +389,11 @@ namespace uPLibrary.Networking.M2Mqtt
                 {
                     // fixed scenario with socket closed gracefully by peer/broker and
                     // Read return 0. Avoid infinite loop.
+#if COMPACT_FRAMEWORK
+                    read = this.tcp.Client.Receive(buffer, idx, buffer.Length - idx, SocketFlags.None);
+#else
                     read = this.socket.Receive(buffer, idx, buffer.Length - idx, SocketFlags.None);
+#endif
                     if (read == 0)
                         return 0;
                     idx += read;
@@ -349,7 +425,11 @@ namespace uPLibrary.Networking.M2Mqtt
         public int Receive(byte[] buffer, int timeout)
         {
             // check data availability (timeout is in microseconds)
+#if COMPACT_FRAMEWORK
+            if (this.tcp.Client.Poll(timeout * 1000, SelectMode.SelectRead))
+#else
             if (this.socket.Poll(timeout * 1000, SelectMode.SelectRead))
+#endif
             {
                 return this.Receive(buffer);
             }
@@ -367,12 +447,23 @@ namespace uPLibrary.Networking.M2Mqtt
 #if SSL
             if (this.secure)
             {
-#if (!MF_FRAMEWORK_VERSION_V4_2 && !MF_FRAMEWORK_VERSION_V4_3)
+#if (!MF_FRAMEWORK_VERSION_V4_2 && !MF_FRAMEWORK_VERSION_V4_3 && !COMPACT_FRAMEWORK)
                 this.netStream.Close();
 #endif
+
+#if COMPACT_FRAMEWORK
+                this.tlsHandler.Close();
+#else
                 this.sslStream.Close();
+#endif
             }
+
+#if COMPACT_FRAMEWORK
+            this.tcp.Close();
+#else
             this.socket.Close();
+#endif
+
 #else
             this.socket.Close();
 #endif
@@ -387,8 +478,9 @@ namespace uPLibrary.Networking.M2Mqtt
             // secure channel requested
             if (secure)
             {
-#if !(MF_FRAMEWORK_VERSION_V4_2 || MF_FRAMEWORK_VERSION_V4_3)
-
+                // TODO: implement server part for .NET Compact (actually necessary?)
+#if !(MF_FRAMEWORK_VERSION_V4_2 || MF_FRAMEWORK_VERSION_V4_3 || COMPACT_FRAMEWORK)
+                
                 this.netStream = new NetworkStream(this.socket);
                 this.sslStream = new SslStream(this.netStream, false, this.userCertificateValidationCallback, this.userCertificateSelectionCallback);
 

@@ -16,9 +16,11 @@ Contributors:
 
 using System;
 using System.Net;
-#if !(WINDOWS_APP || WINDOWS_PHONE_APP)
+#if !(WINDOWS_APP || WINDOWS_PHONE_APP || COMPACT_FRAMEWORK)
 using System.Net.Sockets;
 using System.Security.Cryptography.X509Certificates;
+#elif COMPACT_FRAMEWORK
+using Org.BouncyCastle.X509;
 #endif
 using System.Threading;
 using uPLibrary.Networking.M2Mqtt.Exceptions;
@@ -35,14 +37,19 @@ using Microsoft.SPOT.Net.Security;
 // else other frameworks (.Net, .Net Compact, Mono, Windows Phone) 
 #else
 using System.Collections.Generic;
-#if (SSL && !(WINDOWS_APP || WINDOWS_PHONE_APP))
+#if (SSL)
+#if !(WINDOWS_APP || WINDOWS_PHONE_APP || COMPACT_FRAMEWORK)
 using System.Security.Authentication;
 using System.Net.Security;
+#elif COMPACT_FRAMEWORK
+#endif
 #endif
 #endif
 
 #if (WINDOWS_APP || WINDOWS_PHONE_APP)
 using Windows.Networking.Sockets;
+#elif COMPACT_FRAMEWORK
+using System.Net.Sockets;
 #endif
 
 using System.Collections;

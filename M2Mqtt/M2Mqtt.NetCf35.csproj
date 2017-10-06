@@ -24,7 +24,7 @@
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
     <OutputPath>..\bin\Debug\M2Mqtt.NetCf35\</OutputPath>
-    <DefineConstants>TRACE;DEBUG;WindowsCE,COMPACT_FRAMEWORK</DefineConstants>
+    <DefineConstants>TRACE;DEBUG;WindowsCE,COMPACT_FRAMEWORK,SSL</DefineConstants>
     <NoStdLib>true</NoStdLib>
     <NoConfig>true</NoConfig>
     <ErrorReport>prompt</ErrorReport>
@@ -36,7 +36,7 @@
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
     <OutputPath>..\bin\Release\M2Mqtt.NetCf35\</OutputPath>
-    <DefineConstants>TRACE;WindowsCE,COMPACT_FRAMEWORK</DefineConstants>
+    <DefineConstants>TRACE;WindowsCE,COMPACT_FRAMEWORK,SSL</DefineConstants>
     <NoStdLib>true</NoStdLib>
     <NoConfig>true</NoConfig>
     <ErrorReport>prompt</ErrorReport>
@@ -96,6 +96,12 @@
     <Compile Include="Session\MqttSession.cs" />
     <Compile Include="Utility\Trace.cs" />
     <Compile Include="Utility\QueueExtension.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Org.BouncyCastle\Org.BouncyCastle.csproj">
+      <Project>{334A4E83-BD0B-470D-A610-DF09D3866EB0}</Project>
+      <Name>Org.BouncyCastle</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CompactFramework.CSharp.targets" />
   <ProjectExtensions>
