@@ -21,6 +21,8 @@ using System.Net.Sockets;
 using System.Security.Cryptography.X509Certificates;
 #elif COMPACT_FRAMEWORK
 using Org.BouncyCastle.X509;
+using Org.BouncyCastle.Crypto.Tls;
+using uPLibrary.Networking.M2Mqtt.Net;
 #endif
 using System.Threading;
 using uPLibrary.Networking.M2Mqtt.Exceptions;
@@ -174,6 +176,10 @@ namespace uPLibrary.Networking.M2Mqtt
 
         // event for peer/client disconnection
         public event ConnectionClosedEventHandler ConnectionClosed;
+
+#if COMPACT_FRAMEWORK
+        private TlsClient tlsClient;
+#endif
         
         // channel to communicate over the network
         private IMqttNetworkChannel channel;
@@ -280,6 +286,8 @@ namespace uPLibrary.Networking.M2Mqtt
         {
 #if !(MF_FRAMEWORK_VERSION_V4_2 || MF_FRAMEWORK_VERSION_V4_3 || COMPACT_FRAMEWORK)
             this.Init(brokerIpAddress.ToString(), brokerPort, secure, caCert, clientCert, sslProtocol, null, null);
+#elif COMPACT_FRAMEWORK
+            this.Init(brokerIpAddress.ToString(), brokerPort, secure, caCert, clientCert, sslProtocol, new BasicTlsClient());
 #else
             this.Init(brokerIpAddress.ToString(), brokerPort, secure, caCert, clientCert, sslProtocol);
 #endif
@@ -291,10 +299,10 @@ namespace uPLibrary.Networking.M2Mqtt
         /// </summary>
         /// <param name="brokerHostName">Broker Host Name or IP Address</param>
         public MqttClient(string brokerHostName) :
-#if !(WINDOWS_APP || WINDOWS_PHONE_APP)
+#if !(WINDOWS_APP || WINDOWS_PHONE_APP || COMPACT_FRAMEWORK)
             this(brokerHostName, MqttSettings.MQTT_BROKER_DEFAULT_PORT, false, null, null, MqttSslProtocols.None)
 #else
-            this(brokerHostName, MqttSettings.MQTT_BROKER_DEFAULT_PORT, false, MqttSslProtocols.None)
+            this(brokerHostName, MqttSettings.MQTT_BROKER_DEFAULT_PORT, false, null, null, MqttSslProtocols.None, null)
 #endif
         {
         }
@@ -306,10 +314,15 @@ namespace uPLibrary.Networking.M2Mqtt
         /// <param name="brokerPort">Broker port</param>
         /// <param name="secure">Using secure connection</param>
         /// <param name="sslProtocol">SSL/TLS protocol version</param>
-#if !(WINDOWS_APP || WINDOWS_PHONE_APP)
+#if !(WINDOWS_APP || WINDOWS_PHONE_APP || COMPACT_FRAMEWORK)
         /// <param name="caCert">CA certificate for secure connection</param>
         /// <param name="clientCert">Client certificate</param>
-        public MqttClient(string brokerHostName, int brokerPort, bool secure, X509Certificate caCert, X509Certificate clientCert, MqttSslProtocols sslProtocol)            
+        public MqttClient(string brokerHostName, int brokerPort, bool secure, X509Certificate caCert, X509Certificate clientCert, MqttSslProtocols sslProtocol)
+#elif COMPACT_FRAMEWORK
+        /// <param name="caCert">CA certificate for secure connection</param>
+        /// <param name="clientCert">Client certificate</param>
+        /// <param name="tlsClient">Bouncy Castle Tls Client - set null to use default client (no client certificate checks)</param>
+        public MqttClient(string brokerHostName, int brokerPort, bool secure, X509Certificate caCert, X509Certificate clientCert, MqttSslProtocols sslProtocol, TlsClient tlsClient)
 #else
         public MqttClient(string brokerHostName, int brokerPort, bool secure, MqttSslProtocols sslProtocol)            
 #endif
@@ -318,6 +331,8 @@ namespace uPLibrary.Networking.M2Mqtt
             this.Init(brokerHostName, brokerPort, secure, caCert, clientCert, sslProtocol, null, null);
 #elif (WINDOWS_APP || WINDOWS_PHONE_APP)
             this.Init(brokerHostName, brokerPort, secure, sslProtocol);
+#elif COMPACT_FRAMEWORK
+            this.Init(brokerHostName, brokerPort, secure, caCert, clientCert, sslProtocol, tlsClient);
 #else
             this.Init(brokerHostName, brokerPort, secure, caCert, clientCert, sslProtocol);
 #endif
@@ -431,7 +446,7 @@ namespace uPLibrary.Networking.M2Mqtt
 #elif (WINDOWS_APP || WINDOWS_PHONE_APP)
         private void Init(string brokerHostName, int brokerPort, bool secure, MqttSslProtocols sslProtocol)
 #else
-        private void Init(string brokerHostName, int brokerPort, bool secure, X509Certificate caCert, X509Certificate clientCert, MqttSslProtocols sslProtocol)
+        private void Init(string brokerHostName, int brokerPort, bool secure, X509Certificate caCert, X509Certificate clientCert, MqttSslProtocols sslProtocol, TlsClient tlsClient)
 #endif
         {
             // set default MQTT protocol version (default is 3.1.1)
@@ -452,6 +467,10 @@ namespace uPLibrary.Networking.M2Mqtt
                 this.settings.Port = this.brokerPort;
             else
                 this.settings.SslPort = this.brokerPort;
+
+#if COMPACT_FRAMEWORK
+            this.tlsClient = tlsClient;
+#endif
 
             this.syncEndReceiving = new AutoResetEvent(false);
             this.keepAliveEvent = new AutoResetEvent(false);
@@ -474,7 +493,7 @@ namespace uPLibrary.Networking.M2Mqtt
 #elif (WINDOWS_APP || WINDOWS_PHONE_APP)
             this.channel = new MqttNetworkChannel(this.brokerHostName, this.brokerPort, secure, sslProtocol);
 #else
-            this.channel = new MqttNetworkChannel(this.brokerHostName, this.brokerPort, secure, caCert, clientCert, sslProtocol);
+            this.channel = new MqttNetworkChannel(this.brokerHostName, this.brokerPort, secure, caCert, clientCert, sslProtocol, this.tlsClient);
 #endif
         }
 

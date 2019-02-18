@@ -14,14 +14,15 @@ Contributors:
    Paolo Patierno - initial API and implementation and/or initial documentation
 */
 
+
 #if SSL
 #if (MF_FRAMEWORK_VERSION_V4_2 || MF_FRAMEWORK_VERSION_V4_3)
 using Microsoft.SPOT.Net.Security;
 #elif (COMPACT_FRAMEWORK)
 using Org.BouncyCastle.Crypto.Tls;
 using Org.BouncyCastle.Security;
-using Org.BouncyCastle.Utilities.IO;
 using Org.BouncyCastle.X509;
+using uPLibrary.Networking.M2Mqtt.Net;
 #else
 using System.Net.Security;
 using System.Security.Authentication;
@@ -37,27 +38,7 @@ using System;
 namespace uPLibrary.Networking.M2Mqtt
 {
 #if COMPACT_FRAMEWORK
-    internal class MyTlsClient : DefaultTlsClient
-    {
-        public override TlsAuthentication GetAuthentication()
-        {
-            return new MyTlsAuthentication();
-        }
-    }
 
-    internal class MyTlsAuthentication : TlsAuthentication
-    {
-        // TODO: implement RemoteCertificateValidationCallback alternative
-        public void NotifyServerCertificate(Certificate serverCertificate)
-        {
-        }
-
-        // TODO: implement LocalCertificateSelectionCallback alternative
-        public TlsCredentials GetClientCredentials(CertificateRequest certificateRequest)
-        {
-            return null;
-        }
-    }
 #endif
 
     /// <summary>
@@ -79,6 +60,7 @@ namespace uPLibrary.Networking.M2Mqtt
         private Socket socket;
 #else
         private TcpClient tcp;
+        private TlsClient tlsClient;
 #endif
         // using SSL
         private bool secure;
@@ -204,7 +186,7 @@ namespace uPLibrary.Networking.M2Mqtt
 #if !(MF_FRAMEWORK_VERSION_V4_2 || MF_FRAMEWORK_VERSION_V4_3 || COMPACT_FRAMEWORK)
             : this(remoteHostName, remotePort, false, null, null, MqttSslProtocols.None, null, null)
 #else
-            : this(remoteHostName, remotePort, false, null, null, MqttSslProtocols.None)
+            : this(remoteHostName, remotePort, false, null, null, MqttSslProtocols.None, new BasicTlsClient())
 #endif
         {
         }
@@ -224,6 +206,9 @@ namespace uPLibrary.Networking.M2Mqtt
         public MqttNetworkChannel(string remoteHostName, int remotePort, bool secure, X509Certificate caCert, X509Certificate clientCert, MqttSslProtocols sslProtocol,
             RemoteCertificateValidationCallback userCertificateValidationCallback,
             LocalCertificateSelectionCallback userCertificateSelectionCallback)
+#elif (COMPACT_FRAMEWORK)
+        /// <param name="tlsClient">Bouncy Castle Tls Client - set null to use default client (no client certificate checks)</param>
+        public MqttNetworkChannel(string remoteHostName, int remotePort, bool secure, X509Certificate caCert, X509Certificate clientCert, MqttSslProtocols sslProtocol, TlsClient tlsClient)
 #else
         public MqttNetworkChannel(string remoteHostName, int remotePort, bool secure, X509Certificate caCert, X509Certificate clientCert, MqttSslProtocols sslProtocol)
 #endif
@@ -263,6 +248,9 @@ namespace uPLibrary.Networking.M2Mqtt
             this.caCert = caCert;
             this.clientCert = clientCert;
             this.sslProtocol = sslProtocol;
+#if COMPACT_FRAMEWORK
+            this.tlsClient = tlsClient;
+#endif
 #if !(MF_FRAMEWORK_VERSION_V4_2 || MF_FRAMEWORK_VERSION_V4_3 || COMPACT_FRAMEWORK)
             this.userCertificateValidationCallback = userCertificateValidationCallback;
             this.userCertificateSelectionCallback = userCertificateSelectionCallback;
@@ -292,7 +280,8 @@ namespace uPLibrary.Networking.M2Mqtt
                 this.sslStream = new SslStream(this.socket);
 #elif COMPACT_FRAMEWORK
                 this.tlsHandler = new TlsClientProtocol(tcp.GetStream(), new SecureRandom());
-                this.tlsHandler.Connect(new MyTlsClient());
+
+                this.tlsHandler.Connect(tlsClient ?? new BasicTlsClient());
 #else
                 this.netStream = new NetworkStream(this.socket);
                 this.sslStream = new SslStream(this.netStream, false, this.userCertificateValidationCallback, this.userCertificateSelectionCallback);

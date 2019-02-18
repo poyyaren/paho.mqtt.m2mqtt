@@ -87,9 +87,11 @@
     <Compile Include="Messages\MqttMsgUnsubscribeEventArgs.cs" />
     <Compile Include="MqttClient.cs" />
     <Compile Include="MqttSecurity.cs" />
+    <Compile Include="Net\BasicTlsClient.cs" />
     <Compile Include="Net\Fx.cs" />
     <Compile Include="Net\MqttNetworkChannel.cs" />
     <Compile Include="MqttSettings.cs" />
+    <Compile Include="Net\NoTlsAuthentication.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Session\MqttBrokerSession.cs" />
     <Compile Include="Session\MqttClientSession.cs" />
